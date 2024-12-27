@@ -102,7 +102,7 @@ def main():
         st.session_state.selected_product = None
 
 
-    tabs = st.tabs(["📚 Example Products", "📤 Upload Image", "📸 Take Photo"])
+    tabs = st.tabs(["📚 Example Products","📸 Take Photo","📤 Upload Image"])
     
     with tabs[0]:
         products = {
@@ -139,14 +139,14 @@ def main():
                         st.warning(f"Unable to load image: {image_path}")
 
     
-    with tabs[1]:
+    with tabs[2]:
         uploaded_file = st.file_uploader("Upload product image", type=["jpg", "jpeg", "png"])
         if uploaded_file:
             st.image(uploaded_file, caption="Uploaded Image", width=300)
             if st.button("Analyze Upload", key="analyze_upload"):
                 analyze_image(uploaded_file)
     
-    with tabs[2]:
+    with tabs[1]:
         camera_photo = st.camera_input("Take a photo")
         if camera_photo:
             st.image(camera_photo, caption="Captured Photo", width=300)
