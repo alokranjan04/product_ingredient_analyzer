@@ -1,6 +1,3 @@
-# pip install phidata google-generativeai tavily-python
-# pip install streamlit
-
 import streamlit as st
 import os
 from PIL import Image
@@ -11,26 +8,173 @@ from phi.tools.tavily import TavilyTools
 from tempfile import NamedTemporaryFile
 from constants import SYSTEM_PROMPT, INSTRUCTIONS
 
-os.environ['TAVILY_API_KEY'] = st.secrets['TAVILY_KEY']
-os.environ['GOOGLE_API_KEY'] = st.secrets['GEMINI_KEY']
+# Environment variables setup
+
+
+os.environ['TAVILY_API_KEY'] =  st.secrets['TAVILY_KEY'] 
+os.environ['GOOGLE_API_KEY'] =  st.secrets['GEMINI_KEY'] 
 
 MAX_IMAGE_WIDTH = 300
+def main():
+    st.markdown("""
+        <style>
+        /* App background and container */
+        .stApp {
+            background: #f5f7fa;
+        }
+        
+        /* Title and header */
+        .stMarkdown h1 {
+            color: #2193b0;
+            font-size: 2.5em;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        
+        /* Tabs styling */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 1rem;
+            padding: 0.5rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            padding: 0 20px;
+            background: white;
+            border-radius: 8px;
+            color: #2193b0;
+        }
+        
+        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+            background: linear-gradient(90deg, #2193b0, #6dd5ed);
+            color: white;
+        }
+        
+        /* Product cards */
+        .product-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        
+        /* Buttons */
+        .stButton > button {
+            width: 100%;
+            background: linear-gradient(90deg, #2193b0, #6dd5ed);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(33, 147, 176, 0.3);
+        }
+        
+        /* Upload section */
+        .upload-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin: 1rem 0;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-def resize_image_for_display(image_file):
-    """Resize image for display only, returns bytes"""
-    if isinstance(image_file, str):
-        img = Image.open(image_file)
-    else:
-        img = Image.open(image_file)
-        image_file.seek(0)
+    # Title Section
+    st.markdown("""
+        <div class="title-container">
+            <h1 class="title-text">🔍 Product Ingredient Analyzer</h1>
+        </div>
+    """, unsafe_allow_html=True)
+    # Initialize session state for selected product
+    if 'selected_product' not in st.session_state:
+        st.session_state.selected_product = None
+
+
+    tabs = st.tabs(["📚 Example Products", "📤 Upload Image", "📸 Take Photo"])
     
-    aspect_ratio = img.height / img.width
-    new_height = int(MAX_IMAGE_WIDTH * aspect_ratio)
-    img = img.resize((MAX_IMAGE_WIDTH, new_height), Image.Resampling.LANCZOS)
+    with tabs[0]:
+        products = {
+            "🍫 Chocolate Bar": "./images/hide_and_seek.jpg",
+            "🥤 Energy Drink": "./images/bournvita.jpg",
+            "🥔 Potato Chips": "./images/lays.jpg",
+            "🧴 Shampoo": "./images/shampoo.jpg"
+        }
+        
+        # Create a clean card layout
+        st.markdown('<div class="product-grid">', unsafe_allow_html=True)
+        cols = st.columns(4)
+        for idx, (name, image_path) in enumerate(products.items()):
+            with cols[idx]:
+                # Display product card without image
+                st.markdown(f"""
+                    <div style="padding: 1rem; border-radius: 10px; border: 1px solid #eee; text-align: center;">
+                        <div style="font-size: 2rem;">{name[0]}</div>
+                        <div style="margin-top: 0.5rem;">{name[2:]}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Analyze button
+                if st.button("Analyze", key=f"analyze_{idx}"):
+                    st.session_state.selected_product = image_path
+                
+                # Show image only if this product is selected
+                if st.session_state.selected_product == image_path:
+                    try:
+                        image = Image.open(image_path)
+                        st.image(image, caption=name[2:], width=300)
+                        analyze_image(image_path)
+                    except Exception as e:
+                        st.warning(f"Unable to load image: {image_path}")
+
     
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
+    with tabs[1]:
+        uploaded_file = st.file_uploader("Upload product image", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            st.image(uploaded_file, caption="Uploaded Image", width=300)
+            if st.button("Analyze Upload", key="analyze_upload"):
+                analyze_image(uploaded_file)
+    
+    with tabs[2]:
+        camera_photo = st.camera_input("Take a photo")
+        if camera_photo:
+            st.image(camera_photo, caption="Captured Photo", width=300)
+            if st.button("Analyze Photo", key="analyze_camera"):
+                analyze_image(camera_photo)
+
+def analyze_product(image_path):
+    st.session_state.selected_example = image_path
+    analyze_image(image_path)
+
+def analyze_image(image):
+    with st.spinner('Analyzing ingredients...'):
+        agent = get_agent()
+        if isinstance(image, str):
+            response = agent.run("Analyze the given image", images=[image])
+        else:
+            temp_path = save_uploaded_file(image)
+            response = agent.run("Analyze the given image", images=[temp_path])
+            os.unlink(temp_path)
+        st.markdown(response.content)
+
+def display_product_image(image_path):
+    try:
+        image = Image.open(image_path)
+        st.image(image, caption="Product Image", width=300)
+    except Exception as e:
+        st.warning("Product image not available")
+
 
 @st.cache_resource
 def get_agent():
@@ -42,86 +186,14 @@ def get_agent():
         markdown=True,
     )
 
-def analyze_image(image_path):
-    agent = get_agent()
-    with st.spinner('Analyzing image...'):
-        response = agent.run(
-            "Analyze the given image",
-            images=[image_path],
-        )
-        st.markdown(response.content)
-
 def save_uploaded_file(uploaded_file):
     with NamedTemporaryFile(dir='.', suffix='.jpg', delete=False) as f:
         f.write(uploaded_file.getbuffer())
         return f.name
 
-def main():
-    st.title("🔍 Product Ingredient Analyzer")
-    
-    if 'selected_example' not in st.session_state:
-        st.session_state.selected_example = None
-    if 'analyze_clicked' not in st.session_state:
-        st.session_state.analyze_clicked = False
-    
-    tab_examples, tab_upload, tab_camera = st.tabs([
-        "📚 Example Products", 
-        "📤 Upload Image", 
-        "📸 Take Photo"
-    ])
-    
-    with tab_examples:
-        example_images = {
-            "🍫 Chocolate Bar": "images/hide_and_seek.jpg",
-            "🥤 Energy Drink": "images/bournvita.jpg",
-            "🥔 Potato Chips": "images/lays.jpg",
-            "🧴 Shampoo": "images/shampoo.jpg"
-        }
-        
-        cols = st.columns(4)
-        for idx, (name, path) in enumerate(example_images.items()):
-            with cols[idx]:
-                if st.button(name, use_container_width=True):
-                    st.session_state.selected_example = path
-                    st.session_state.analyze_clicked = False
-    
-    with tab_upload:
-        uploaded_file = st.file_uploader(
-            "Upload product image", 
-            type=["jpg", "jpeg", "png"],
-            help="Upload a clear image of the product's ingredient list"
-        )
-        if uploaded_file:
-            resized_image = resize_image_for_display(uploaded_file)
-            st.image(resized_image, caption="Uploaded Image", use_container_width=False, width=MAX_IMAGE_WIDTH)
-            if st.button("🔍 Analyze Uploaded Image", key="analyze_upload"):
-                temp_path = save_uploaded_file(uploaded_file)
-                analyze_image(temp_path)
-                os.unlink(temp_path) 
-    
-    with tab_camera:
-        camera_photo = st.camera_input("Take a picture of the product")
-        if camera_photo:
-            resized_image = resize_image_for_display(camera_photo)
-            st.image(resized_image, caption="Captured Photo", use_container_width=False, width=MAX_IMAGE_WIDTH)
-            if st.button("🔍 Analyze Captured Photo", key="analyze_camera"):
-                temp_path = save_uploaded_file(camera_photo)
-                analyze_image(temp_path)
-                os.unlink(temp_path) 
-    
-    if st.session_state.selected_example:
-        st.divider()
-        st.subheader("Selected Product")
-        resized_image = resize_image_for_display(st.session_state.selected_example)
-        st.image(resized_image, caption="Selected Example", use_container_width=False, width=MAX_IMAGE_WIDTH)
-        
-        if st.button("🔍 Analyze Example", key="analyze_example") and not st.session_state.analyze_clicked:
-            st.session_state.analyze_clicked = True
-            analyze_image(st.session_state.selected_example)
-
 if __name__ == "__main__":
     st.set_page_config(
-        page_title="Product Ingredient Agent",
+        page_title="Product Ingredient Analyzer",
         layout="wide",
         initial_sidebar_state="collapsed"
     )

@@ -16,3 +16,6 @@ INSTRUCTIONS = """
 * Provide brief evidence-based recommendations
 * Use Search tool for getting context
 """
+
+TAVILY_KEY="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" 
+GEMINI_KEY="AIzaSyCC8Jzi0g_NDulN3m482MmBCZKZ10v_I5c" 
